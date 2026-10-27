@@ -1,0 +1,23 @@
+# Local configuration and secrets.
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.key
+*.pem
+*.p12
+plan/
+
+# Build, test and tool artifacts.
+/.cache/
+/bin/
+/dist/
+/coverage/
+/coverage.out
+*.test
+*.prof
+*.log
+
+# OS files.
+.DS_Store
