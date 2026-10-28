@@ -162,10 +162,21 @@ services:
     pull_policy: missing
     restart: "no"
     logging: *logging
-    command: ["run", "/scripts/scenario.js"]
+    # Official image entrypoint is already k6. Keep it explicit so SIGINT/SIGTERM
+    # reach k6 rather than a shell. duration 0s is infinite only for this executor.
+    entrypoint: ["k6"]
+    command:
+      - run
+      - --quiet
+      - --no-thresholds
+      - --summary-mode=disabled
+      - --address=
+      - /scripts/scenario.js
     environment:
+      K6_NO_USAGE_REPORT: "true"
       APP1_BASE_URL: http://app-1:8080
       APP2_BASE_URL: http://app-2:8080
+    stop_grace_period: 15s
     volumes:
       - ./load:/scripts:ro
     depends_on:
