@@ -436,6 +436,16 @@ func readIdent(expr string) (string, string, error) {
 }
 
 func readQuoted(expr string) (string, string, error) {
+	if expr == "" {
+		return "", "", fmt.Errorf("string is missing")
+	}
+	if expr[0] == '`' {
+		end := strings.IndexByte(expr[1:], '`')
+		if end < 0 {
+			return "", "", fmt.Errorf("string is unterminated")
+		}
+		return expr[1 : 1+end], expr[2+end:], nil
+	}
 	if !strings.HasPrefix(expr, `"`) {
 		return "", "", fmt.Errorf("string is missing")
 	}

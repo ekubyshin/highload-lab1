@@ -97,30 +97,23 @@ func getDashboard(ctx context.Context, httpClient *http.Client, cfg Config) (sav
 }
 
 func createDashboard(ctx context.Context, httpClient *http.Client, cfg Config, spec Spec) (savedDashboard, error) {
-	target, err := dashboardCollectionURL(cfg.GrafanaURL)
-	if err != nil {
-		return savedDashboard{}, err
-	}
-	payload, err := encodeDashboard(spec, "")
-	if err != nil {
-		return savedDashboard{}, err
-	}
-	status, body, err := do(ctx, httpClient, cfg, cfg.Username, cfg.Password, http.MethodPost, target, payload, maxDashboardBytes)
-	if err != nil {
-		return savedDashboard{}, fmt.Errorf("create dashboard: %w", err)
-	}
-	if status != http.StatusOK && status != http.StatusCreated {
-		return savedDashboard{}, dashboardStatus("create dashboard", http.MethodPost, requestPath(target), status, body, cfg.Password)
-	}
-	saved, err := decodeDashboard(body)
-	if err != nil {
-		return savedDashboard{}, fmt.Errorf("create dashboard: %w", err)
-	}
-	return saved, nil
+	return writeDashboard(ctx, httpClient, cfg, http.MethodPost, "create dashboard", "", spec)
 }
 
 func updateDashboard(ctx context.Context, httpClient *http.Client, cfg Config, resourceVersion string, spec Spec) (savedDashboard, error) {
-	target, err := dashboardItemURL(cfg.GrafanaURL)
+	return writeDashboard(ctx, httpClient, cfg, http.MethodPut, "update dashboard", resourceVersion, spec)
+}
+
+func writeDashboard(ctx context.Context, httpClient *http.Client, cfg Config, method, action, resourceVersion string, spec Spec) (savedDashboard, error) {
+	var (
+		target string
+		err    error
+	)
+	if method == http.MethodPost {
+		target, err = dashboardCollectionURL(cfg.GrafanaURL)
+	} else {
+		target, err = dashboardItemURL(cfg.GrafanaURL)
+	}
 	if err != nil {
 		return savedDashboard{}, err
 	}
@@ -128,16 +121,16 @@ func updateDashboard(ctx context.Context, httpClient *http.Client, cfg Config, r
 	if err != nil {
 		return savedDashboard{}, err
 	}
-	status, body, err := do(ctx, httpClient, cfg, cfg.Username, cfg.Password, http.MethodPut, target, payload, maxDashboardBytes)
+	status, body, err := do(ctx, httpClient, cfg, cfg.Username, cfg.Password, method, target, payload, maxDashboardBytes)
 	if err != nil {
-		return savedDashboard{}, fmt.Errorf("update dashboard: %w", err)
+		return savedDashboard{}, fmt.Errorf("%s: %w", action, err)
 	}
 	if status != http.StatusOK && status != http.StatusCreated {
-		return savedDashboard{}, dashboardStatus("update dashboard", http.MethodPut, requestPath(target), status, body, cfg.Password)
+		return savedDashboard{}, dashboardStatus(action, method, requestPath(target), status, body, cfg.Password)
 	}
 	saved, err := decodeDashboard(body)
 	if err != nil {
-		return savedDashboard{}, fmt.Errorf("update dashboard: %w", err)
+		return savedDashboard{}, fmt.Errorf("%s: %w", action, err)
 	}
 	return saved, nil
 }
@@ -181,20 +174,37 @@ func sameDashboard(want, got Spec) error {
 	if uid := deref(got.Uid); uid != "" && uid != dashboardUID {
 		return fmt.Errorf("stored dashboard uid is %s", uid)
 	}
-	wantExpr := expressionsOf(want)
-	gotExpr := expressionsOf(got)
-	if len(gotExpr) != len(wantExpr) {
-		return fmt.Errorf("stored dashboard has %d queries, want %d", len(gotExpr), len(wantExpr))
-	}
-	left := slices.Clone(wantExpr)
-	right := slices.Clone(gotExpr)
-	slices.Sort(left)
-	slices.Sort(right)
-	if !slices.Equal(left, right) {
-		return fmt.Errorf("stored dashboard queries do not match the catalog")
-	}
-	if err := sameVariables(want.Templating.List, got.Templating.List); err != nil {
+	if err := samePanels(want.Panels, got.Panels); err != nil {
 		return err
+	}
+	return sameVariables(want.Templating.List, got.Templating.List)
+}
+
+func samePanels(want, got []gf.PanelOrRowPanel) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("stored dashboard has %d panels, want %d", len(got), len(want))
+	}
+	for i := range want {
+		wantPanel := want[i].Panel
+		gotPanel := got[i].Panel
+		if wantPanel == nil || gotPanel == nil {
+			return fmt.Errorf("stored panel %d is missing", i)
+		}
+		if deref(gotPanel.Title) != deref(wantPanel.Title) {
+			return fmt.Errorf("stored panel %d title is %s", i, deref(gotPanel.Title))
+		}
+		if err := samePanelQueries(wantPanel, gotPanel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func samePanelQueries(wantPanel, gotPanel *gf.Panel) error {
+	wantExpr := panelExpressions(wantPanel)
+	gotExpr := panelExpressions(gotPanel)
+	if !slices.Equal(wantExpr, gotExpr) {
+		return fmt.Errorf("stored panel %s queries do not match", deref(wantPanel.Title))
 	}
 	return nil
 }

@@ -34,7 +34,7 @@ docker compose down -v # вместе с базой Grafana, метриками 
 
 ## Пароль Grafana
 
-В `.env.example` указаны `GRAFANA_ADMIN_USER=admin` и пустой `GRAFANA_ADMIN_PASSWORD=`. Пустое значение — сигнал сгенерировать пароль, а не запасной пароль. Файл `.env` в Git не входит.
+В `.env.example` указаны `GRAFANA_ADMIN_USER=admin` и пустой `GRAFANA_ADMIN_PASSWORD=`. Файл `.env` в Git не входит.
 
 Одноразовый `stack-init` при первом запуске записывает username и password в named volume `credentials` и завершается. Повторный запуск использует ту же пару. Свой пароль можно положить в `.env` до первого старта. Если заданная пара не совпадает с уже сохранённой, init останавливается и не меняет пароль молча. Смена `.env` не меняет пароль уже созданной базы Grafana.
 
@@ -122,12 +122,14 @@ Histogram отдаёт кумулятивные счётчики `_bucket` с о
 Пример для `POST /items`. Для `GET` и `PUT` меняются `method` и `route`.
 
 ```promql
-histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="items-app",method="POST",route="/items",datacenter=~"${datacenter:regex}",pod_id=~"${pod_id:regex}"}[$__rate_interval])))
+histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="items-app",method="POST",route="/items",datacenter=~`${datacenter:regex}`,pod_id=~`${pod_id:regex}`}[$__rate_interval])))
 
-sum(rate(http_requests_total{job="items-app",method="POST",route="/items",datacenter=~"${datacenter:regex}",pod_id=~"${pod_id:regex}"}[$__rate_interval]))
+sum(rate(http_requests_total{job="items-app",method="POST",route="/items",datacenter=~`${datacenter:regex}`,pod_id=~`${pod_id:regex}`}[$__rate_interval]))
 
-sum by (status_code) (rate(http_requests_total{job="items-app",method="POST",route="/items",datacenter=~"${datacenter:regex}",pod_id=~"${pod_id:regex}",status_code=~"4..|5.."}[$__rate_interval]))
+sum by (status_code) (rate(http_requests_total{job="items-app",method="POST",route="/items",datacenter=~`${datacenter:regex}`,pod_id=~`${pod_id:regex}`,status_code=~"4..|5.."}[$__rate_interval]))
 ```
+
+Селекторы `datacenter` и `pod_id` записаны raw-строкой PromQL. Grafana экранирует точку в значении одним слэшем, и Prometheus 3 принимает такой regex. Для `dc-1` и `1` экранирование ничего не меняет.
 
 RPS — сумма скоростей выбранных экземпляров, не среднее. Перцентили считаются по сумме бакетов, а не усредняются между подами. `rate` берётся до суммирования, чтобы перезапуск пода не ломал расчёт.
 

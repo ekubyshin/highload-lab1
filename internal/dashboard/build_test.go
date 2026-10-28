@@ -81,16 +81,24 @@ func TestBuildPanelsFromCatalog(t *testing.T) {
 	}
 }
 
-func TestBuildEscapesQuotesInPromQLAndJSON(t *testing.T) {
+func TestBuildRejectsRoutesTheRegistrarWould(t *testing.T) {
 	t.Parallel()
 
-	path := `/v1/"id"`
+	if _, err := Build([]Endpoint{{Method: "GET", Path: `/v1/"id"`}}); err == nil {
+		t.Fatal("quoted path was accepted")
+	}
+}
+
+func TestBuildRoundTripsRouteThroughJSON(t *testing.T) {
+	t.Parallel()
+
+	path := "/widgets/{id}"
 	spec, err := Build([]Endpoint{{Method: "GET", Path: path}})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
 	expr := targetAt(t, panelAt(t, spec, 0), 0).Expr
-	if !strings.Contains(expr, `route="/v1/\"id\""`) {
+	if !strings.Contains(expr, `route="/widgets/{id}"`) {
 		t.Fatalf("promql literal = %s", expr)
 	}
 	payload, err := json.Marshal(spec)
@@ -103,9 +111,6 @@ func TestBuildEscapesQuotesInPromQLAndJSON(t *testing.T) {
 	}
 	if targetAt(t, panelAt(t, decoded, 0), 0).Expr != expr {
 		t.Fatalf("round trip expr = %s", targetAt(t, panelAt(t, decoded, 0), 0).Expr)
-	}
-	if strings.Contains(string(payload), path) && !strings.Contains(string(payload), `\"`) {
-		t.Fatal("quote was inserted into JSON without escaping")
 	}
 }
 
@@ -144,7 +149,7 @@ func TestVariablesKeepAllWhenMetricsAreEmpty(t *testing.T) {
 	if datacenter.Name != "datacenter" || !strings.Contains(queryText(datacenter.Query), `job="items-app"`) {
 		t.Fatalf("datacenter query = %s", queryText(datacenter.Query))
 	}
-	if pod.Name != "pod_id" || !strings.Contains(queryText(pod.Query), `datacenter=~"${datacenter:regex}"`) || !strings.Contains(queryText(pod.Query), "pod_id") {
+	if pod.Name != "pod_id" || !strings.Contains(queryText(pod.Query), "datacenter=~`${datacenter:regex}`") || !strings.Contains(queryText(pod.Query), "pod_id") {
 		t.Fatalf("pod query = %s", queryText(pod.Query))
 	}
 }
@@ -221,5 +226,26 @@ func TestBusinessCatalogShapeHasNinePanels(t *testing.T) {
 	}
 	if len(spec.Panels) != 9 {
 		t.Fatalf("panels = %d", len(spec.Panels))
+	}
+}
+
+func TestQueriesUseSharedMetricNames(t *testing.T) {
+	t.Parallel()
+
+	latency := latencyQuery("GET", "/widgets/{id}", p95)
+	if latency.metric != metricDuration || latency.quantile != p95 || !strings.Contains(latency.form, "sum by (le)") {
+		t.Fatalf("latency = %+v", latency)
+	}
+	expr := latency.String()
+	if !strings.Contains(expr, "datacenter=~`${datacenter:regex}`") || !strings.Contains(expr, `route="/widgets/{id}"`) {
+		t.Fatalf("latency expr = %s", expr)
+	}
+	rps := rpsQuery("GET", "/widgets/{id}")
+	if rps.metric != metricRequests || !strings.Contains(rps.form, "sum(rate(") {
+		t.Fatalf("rps = %+v", rps)
+	}
+	got := errorQuery("GET", "/widgets/{id}").String()
+	if !strings.Contains(got, metricRequests) || !strings.Contains(got, `status_code=~"4..|5.."`) || !strings.Contains(got, "sum by (status_code)") {
+		t.Fatalf("errors = %s", got)
 	}
 }

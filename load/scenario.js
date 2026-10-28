@@ -35,7 +35,6 @@ const MISSING_ID = 'missing';
 const duration = configuredDuration();
 
 export const options = {
-  discardResponseBodies: true,
   systemTags: ['status', 'method', 'name', 'scenario', 'expected_response', 'check', 'error_code'],
   summaryTrendStats: ['avg', 'min', 'max'],
   setupTimeout: '30s',

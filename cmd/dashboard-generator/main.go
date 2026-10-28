@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"highload/lab1/internal/dashboard"
 )
@@ -25,10 +24,10 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, dashboard.RunTimeout)
 	defer cancel()
 
-	result, err := dashboard.Generate(ctx, nil, cfg)
+	result, err := dashboard.Generate(ctx, dashboard.NewHTTPClient(), cfg)
 	if err != nil {
 		return err
 	}

@@ -53,8 +53,11 @@ export function cumulativeRequests(seconds) {
 // Inverse of cumulativeRequests for an integer slot index.
 export function slotTimeSeconds(slot) {
   if (slot <= RAMP_SLOTS) {
-    const discriminant = 2304 + (192 * slot) / START_RPS;
-    return (-48 + Math.sqrt(discriminant)) / 2;
+    // Inverse of cumulativeRequests on the ramp: (slope/2)*t^2 + START_RPS*t = slot.
+    const slope = (PLATEAU_RPS - START_RPS) / RAMP_SECONDS;
+    const linear = (2 * START_RPS) / slope;
+    const discriminant = linear * linear + (8 * slot) / slope;
+    return (-linear + Math.sqrt(discriminant)) / 2;
   }
   return RAMP_SECONDS + (slot - RAMP_SLOTS) / PLATEAU_RPS;
 }

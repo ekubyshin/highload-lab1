@@ -26,6 +26,17 @@ func (e *statusError) Error() string {
 	return fmt.Sprintf("%s %s: returned %d: %s", e.Method, e.Path, e.Status, e.Snippet)
 }
 
+// NewHTTPClient is the client the generator uses for the app catalog and Grafana.
+// The composition root creates it and passes it to Generate.
+func NewHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: requestTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
 func do(ctx context.Context, httpClient *http.Client, cfg Config, username, password, method, target string, payload []byte, limit int64) (int, []byte, error) {
 	attempts := cfg.attempts()
 	var lastErr error

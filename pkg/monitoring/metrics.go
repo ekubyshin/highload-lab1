@@ -12,8 +12,12 @@ import (
 )
 
 const (
-	requestsName = "http_requests_total"
-	durationName = "http_request_duration_seconds"
+	// RequestsTotal counts responses of instrumented routes.
+	RequestsTotal = "http_requests_total"
+	// RequestDurationSeconds is the handler latency histogram.
+	// Prometheus publishes its buckets under RequestDurationBucket.
+	RequestDurationSeconds = "http_request_duration_seconds"
+	RequestDurationBucket  = RequestDurationSeconds + "_bucket"
 )
 
 // Metrics collects request counts and latency for routes registered with a Registrar.
@@ -38,22 +42,22 @@ func NewMetrics(reg *prometheus.Registry, podID, datacenter string) (*Metrics, e
 	}
 	metrics := &Metrics{registry: reg}
 	metrics.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name:        requestsName,
+		Name:        RequestsTotal,
 		Help:        "HTTP responses served by instrumented routes.",
 		ConstLabels: constLabels,
 	}, []string{"method", "route", "status_code"})
 	metrics.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:        durationName,
+		Name:        RequestDurationSeconds,
 		Help:        "HTTP request duration in seconds for instrumented routes.",
 		ConstLabels: constLabels,
 		Buckets:     DurationBuckets(),
 	}, []string{"method", "route"})
 
 	if err := reg.Register(metrics.requests); err != nil {
-		return nil, fmt.Errorf("register %s: %w", requestsName, err)
+		return nil, fmt.Errorf("register %s: %w", RequestsTotal, err)
 	}
 	if err := reg.Register(metrics.duration); err != nil {
-		return nil, fmt.Errorf("register %s: %w", durationName, err)
+		return nil, fmt.Errorf("register %s: %w", RequestDurationSeconds, err)
 	}
 	return metrics, nil
 }

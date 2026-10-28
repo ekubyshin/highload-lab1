@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"unicode/utf8"
+
+	"highload/lab1/pkg/monitoring"
 )
 
 const maxCatalogBytes = 64 << 10
@@ -118,7 +119,7 @@ func parseEndpoint(raw json.RawMessage) (Endpoint, error) {
 }
 
 func (e Endpoint) validate() error {
-	if !methodPattern.MatchString(e.Method) {
+	if !monitoring.ValidMethod(e.Method) {
 		return fmt.Errorf("handler method %q is invalid", e.Method)
 	}
 	if err := validatePath(e.Path); err != nil {
@@ -128,31 +129,11 @@ func (e Endpoint) validate() error {
 }
 
 func validatePath(path string) error {
-	if path == "" {
-		return fmt.Errorf("path is empty")
-	}
 	if len(path) > 256 {
 		return fmt.Errorf("path is longer than 256 bytes")
 	}
-	if !utf8.ValidString(path) {
-		return fmt.Errorf("path is not valid UTF-8")
-	}
-	if path[0] != '/' {
-		return fmt.Errorf("path %q must start with /", path)
-	}
-	for _, r := range path {
-		switch {
-		case r < 0x20 || r == 0x7f:
-			return fmt.Errorf("path contains a control character")
-		case r > 0x7e:
-			return fmt.Errorf("path contains a non-ascii character")
-		case r == '$' || r == ' ':
-			// '$' would be interpolated by Grafana before PromQL sees the query.
-			return fmt.Errorf("path %q contains %q", path, r)
-		}
-	}
-	if strings.Contains(path, "//") {
-		return fmt.Errorf("path %q contains an empty segment", path)
+	if !utf8.ValidString(path) || !monitoring.ValidRoutePath(path) {
+		return fmt.Errorf("path %q is invalid", path)
 	}
 	return nil
 }

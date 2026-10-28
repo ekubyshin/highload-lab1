@@ -130,7 +130,7 @@ func TestGenerateRedactsPasswordAndSkipsBusinessRoutes(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"handlers": []map[string]string{{"method": "GET", "path": `/v1/"id"`}},
+			"handlers": []map[string]string{{"method": "GET", "path": "/widgets/{id}"}},
 		})
 	}))
 	t.Cleanup(app.Close)
@@ -159,7 +159,7 @@ func TestGenerateRedactsPasswordAndSkipsBusinessRoutes(t *testing.T) {
 	}
 }
 
-func TestGenerateSavesQuotedRoute(t *testing.T) {
+func TestGenerateSavesCatalogRoute(t *testing.T) {
 	t.Parallel()
 
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +170,7 @@ func TestGenerateSavesQuotedRoute(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"handlers": []map[string]string{
 				{"method": "POST", "path": "/widgets"},
-				{"method": "GET", "path": `/v1/"id"`},
+				{"method": "GET", "path": "/widgets/{id}"},
 			},
 		})
 	}))
@@ -192,8 +192,44 @@ func TestGenerateSavesQuotedRoute(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 	stored := strings.Join(expressionsOf(grafana.current().Spec), "\n")
-	if !strings.Contains(stored, `route="/v1/\"id\""`) || isEditable(grafana.current().Spec) {
+	if !strings.Contains(stored, `route="/widgets/{id}"`) || isEditable(grafana.current().Spec) {
 		t.Fatalf("stored dashboard = %s editable=%v", stored, grafana.current().Spec.Editable)
+	}
+}
+
+func TestGenerateRequiresClient(t *testing.T) {
+	t.Parallel()
+
+	_, err := Generate(t.Context(), nil, Config{
+		AppBaseURL: "http://app.example",
+		GrafanaURL: "http://grafana.example",
+		Username:   "admin",
+		Password:   "s3cret-value",
+	})
+	if err == nil {
+		t.Fatal("nil client was accepted")
+	}
+}
+
+func TestNewHTTPClientDoesNotFollowRedirects(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://example.invalid/next", http.StatusFound)
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewHTTPClient()
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if client.Timeout != requestTimeout {
+		t.Fatalf("timeout = %s", client.Timeout)
 	}
 }
 

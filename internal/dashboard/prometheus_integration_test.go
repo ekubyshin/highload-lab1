@@ -214,14 +214,17 @@ scrape_configs:
 	dottedChoice := choice{datacenters: []string{"dc.a"}, allPods: true}
 	assertProm(t, base, dottedRPS, dottedChoice, window, "", 5)
 
-	// Grafana's escapeRegex writes one backslash. Prometheus 3.15 rejects that
-	// inside a double-quoted matcher, so a label value containing "." does not
-	// match through ${var:regex}. Values without metacharacters are unchanged.
+	// Grafana's escapeRegex writes one backslash. The matcher is a PromQL raw
+	// string, so that backslash reaches the regex engine and a dotted label matches.
 	grafanaDot := strings.ReplaceAll(dottedRPS, "$__rate_interval", window)
 	grafanaDot = strings.ReplaceAll(grafanaDot, "${datacenter:regex}", `dc\.a`)
 	grafanaDot = strings.ReplaceAll(grafanaDot, "${pod_id:regex}", ".*")
-	if _, err := promQuery(base, grafanaDot); err == nil || !strings.Contains(err.Error(), "unknown escape") {
-		t.Fatalf("single-backslash Grafana regex was accepted: %v", err)
+	got, err := promQuery(base, grafanaDot)
+	if err != nil {
+		t.Fatalf("dotted datacenter through grafana escaping: %v\n%s", err, grafanaDot)
+	}
+	if math.Abs(got[""]-5) > 0.01 {
+		t.Fatalf("dotted datacenter = %v, want 5\n%s", got, grafanaDot)
 	}
 }
 
@@ -342,18 +345,17 @@ func applyChoice(expr string, selected choice, window string) string {
 	return strings.ReplaceAll(expr, "${pod_id:regex}", promqlRegex(selected.allPods, selected.pods))
 }
 
-// promqlRegex is the text Grafana 13.3 inserts for ${var:regex}, adjusted so the
-// result is a valid PromQL string. A saved All value is the raw allValue ".*":
-// the custom-all formatter does not run escapeRegex on it. Several concrete
-// values become "(a|b)". escapeRegex itself writes one backslash, and PromQL
-// requires that backslash to be escaped again.
+// promqlRegex is the text Grafana 13.3 inserts for ${var:regex}.
+// Matchers are PromQL raw strings, so one backslash from escapeRegex stays a
+// regex escape. A saved All value is the raw allValue ".*": the custom-all
+// formatter does not run escapeRegex on it. Several concrete values become "(a|b)".
 func promqlRegex(all bool, values []string) string {
 	if all {
 		return ".*"
 	}
 	parts := make([]string, len(values))
 	for i, value := range values {
-		parts[i] = strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(regexp.QuoteMeta(value))
+		parts[i] = regexp.QuoteMeta(value)
 	}
 	if len(parts) == 1 {
 		return parts[0]

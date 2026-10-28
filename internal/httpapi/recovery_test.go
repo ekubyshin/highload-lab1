@@ -14,7 +14,7 @@ func TestInternalErrorHidesStorageDetails(t *testing.T) {
 	t.Parallel()
 
 	secret := errors.New("secret-disk-failure")
-	api, err := newAPI(failingStore{err: secret}, NewHealth(), 1024, testMetrics(t))
+	api, err := New(failingStore{err: secret}, NewHealth(), 1024, testMetrics(t))
 	if err != nil {
 		t.Fatalf("new api: %v", err)
 	}
@@ -82,6 +82,10 @@ func TestNewRejectsIncompleteDependencies(t *testing.T) {
 
 	if _, err := New(nil, NewHealth(), 1024, testMetrics(t)); err == nil {
 		t.Fatal("nil store was accepted")
+	}
+	var empty *item.Store
+	if _, err := New(empty, NewHealth(), 1024, testMetrics(t)); err == nil {
+		t.Fatal("nil store pointer was accepted")
 	}
 	if _, err := New(item.NewStore(), nil, 1024, testMetrics(t)); err == nil {
 		t.Fatal("nil health was accepted")

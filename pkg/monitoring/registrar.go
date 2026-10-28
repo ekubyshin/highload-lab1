@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"sync"
 )
 
@@ -46,11 +45,6 @@ func NewRegistrar(metrics *Metrics, onPanic PanicHandler) (*Registrar, error) {
 	}, nil
 }
 
-var (
-	methodPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]{0,15}$`)
-	pathPattern   = regexp.MustCompile(`^(?:/(?:[A-Za-z0-9._~-]+|\{[A-Za-z_][A-Za-z0-9_]*(?:\.\.\.)?\}))+$`)
-)
-
 // Handle registers method and path on mux. The route label is the path template
 // passed here, never the request URL.
 func (reg *Registrar) Handle(mux *http.ServeMux, method, path string, handler http.Handler, opts Options) error {
@@ -60,10 +54,10 @@ func (reg *Registrar) Handle(mux *http.ServeMux, method, path string, handler ht
 	if handler == nil {
 		return errors.New("handler is required")
 	}
-	if !methodPattern.MatchString(method) {
+	if !ValidMethod(method) {
 		return fmt.Errorf("method %q is invalid", method)
 	}
-	if !pathPattern.MatchString(path) {
+	if !ValidRoutePath(path) {
 		return fmt.Errorf("path %q is invalid", path)
 	}
 

@@ -46,7 +46,7 @@ func TestStartupDoesNotCreateMetricSamples(t *testing.T) {
 		t.Fatalf("excluded routes created %d samples", samples)
 	}
 	body := scrape(t, handler)
-	if strings.Contains(body, "http_requests_total") || strings.Contains(body, "id-should-not-leak") {
+	if strings.Contains(body, monitoring.RequestsTotal) || strings.Contains(body, "id-should-not-leak") {
 		t.Fatalf("metrics body = %s", body)
 	}
 }
@@ -310,7 +310,7 @@ func newReadyAPI(t *testing.T, reg *prometheus.Registry, store repository) *API 
 	t.Helper()
 	health := NewHealth()
 	health.SetReady(true)
-	api, err := newAPI(store, health, 1024, testMetricsOn(t, reg, "pod-test", "dc-test"))
+	api, err := New(store, health, 1024, testMetricsOn(t, reg, "pod-test", "dc-test"))
 	if err != nil {
 		t.Fatalf("new api: %v", err)
 	}
@@ -352,7 +352,7 @@ func counterValue(reg *prometheus.Registry, labels map[string]string) (float64, 
 		return 0, false
 	}
 	for _, family := range families {
-		if family.GetName() != "http_requests_total" {
+		if family.GetName() != monitoring.RequestsTotal {
 			continue
 		}
 		for _, metric := range family.GetMetric() {
@@ -367,7 +367,7 @@ func counterValue(reg *prometheus.Registry, labels map[string]string) (float64, 
 func requireHistogramCount(t *testing.T, reg *prometheus.Registry, labels map[string]string, want uint64) {
 	t.Helper()
 	for _, family := range gather(t, reg) {
-		if family.GetName() != "http_request_duration_seconds" {
+		if family.GetName() != monitoring.RequestDurationSeconds {
 			continue
 		}
 		for _, metric := range family.GetMetric() {
@@ -391,10 +391,10 @@ func assertFamilyNames(t *testing.T, reg *prometheus.Registry) {
 	if len(names) != 2 {
 		t.Fatalf("families = %v", names)
 	}
-	if _, ok := names["http_requests_total"]; !ok {
+	if _, ok := names[monitoring.RequestsTotal]; !ok {
 		t.Fatal("request counter is missing")
 	}
-	if _, ok := names["http_request_duration_seconds"]; !ok {
+	if _, ok := names[monitoring.RequestDurationSeconds]; !ok {
 		t.Fatal("duration histogram is missing")
 	}
 }

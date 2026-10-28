@@ -118,7 +118,7 @@ func TestMetricsIgnoreEnvironment(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/items/from-env", nil),
 	)
 
-	labels := labelsOf(t, reg, requestsName)
+	labels := labelsOf(t, reg, RequestsTotal)
 	if len(labels) != 1 {
 		t.Fatalf("series = %d", len(labels))
 	}
@@ -299,7 +299,7 @@ func TestStatusAccounting(t *testing.T) {
 			requireHistogramCount(t, reg, map[string]string{
 				"pod_id": "pod-a", "datacenter": "dc-a", "method": "GET", "route": "/probe",
 			}, 1)
-			if series := len(labelsOf(t, reg, requestsName)); series != 1 {
+			if series := len(labelsOf(t, reg, RequestsTotal)); series != 1 {
 				t.Fatalf("counter series = %d", series)
 			}
 			if test.codes != nil && !slices.Equal(writer.codes, test.codes) {
@@ -459,7 +459,7 @@ func TestConcurrentObservationsShareOneSeries(t *testing.T) {
 	requireCounter(t, reg, map[string]string{
 		"pod_id": "pod-a", "datacenter": "dc-a", "method": "GET", "route": "/items/{id}", "status_code": "200",
 	}, 40)
-	if series := len(labelsOf(t, reg, requestsName)); series != 1 {
+	if series := len(labelsOf(t, reg, RequestsTotal)); series != 1 {
 		t.Fatalf("counter series = %d", series)
 	}
 }
@@ -591,7 +591,7 @@ func requireCounter(t *testing.T, reg *prometheus.Registry, labels map[string]st
 
 func counterValue(reg *prometheus.Registry, labels map[string]string) (float64, bool) {
 	for _, family := range mustGather(reg) {
-		if family.GetName() != requestsName {
+		if family.GetName() != RequestsTotal {
 			continue
 		}
 		for _, metric := range family.GetMetric() {
@@ -614,7 +614,7 @@ func requireHistogramCount(t *testing.T, reg *prometheus.Registry, labels map[st
 func histogramOf(t *testing.T, reg *prometheus.Registry, labels map[string]string) *dto.Histogram {
 	t.Helper()
 	for _, family := range mustGather(reg) {
-		if family.GetName() != durationName {
+		if family.GetName() != RequestDurationSeconds {
 			continue
 		}
 		for _, metric := range family.GetMetric() {
@@ -630,7 +630,7 @@ func histogramOf(t *testing.T, reg *prometheus.Registry, labels map[string]strin
 func histogramBounds(t *testing.T, reg *prometheus.Registry) []float64 {
 	t.Helper()
 	for _, family := range mustGather(reg) {
-		if family.GetName() != durationName || len(family.GetMetric()) == 0 {
+		if family.GetName() != RequestDurationSeconds || len(family.GetMetric()) == 0 {
 			continue
 		}
 		buckets := family.GetMetric()[0].GetHistogram().GetBucket()

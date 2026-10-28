@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 	"runtime/debug"
 
 	"highload/lab1/internal/item"
@@ -24,15 +25,8 @@ type API struct {
 	handler      http.Handler
 }
 
-func New(store *item.Store, health *Health, maxBodyBytes int64, metrics *monitoring.Metrics) (*API, error) {
-	if store == nil {
-		return nil, errors.New("store is required")
-	}
-	return newAPI(store, health, maxBodyBytes, metrics)
-}
-
-func newAPI(store repository, health *Health, maxBodyBytes int64, metrics *monitoring.Metrics) (*API, error) {
-	if store == nil {
+func New(store repository, health *Health, maxBodyBytes int64, metrics *monitoring.Metrics) (*API, error) {
+	if isNil(store) {
 		return nil, errors.New("store is required")
 	}
 	if health == nil {
@@ -79,18 +73,34 @@ func (a *API) Handler() http.Handler {
 	return a.handler
 }
 
+// withRecovery covers /health and /metrics. Those routes are registered on the mux
+// directly, so the metrics wrapper never sees them. Instrumented routes recover
+// inside that wrapper first; this layer then sees a normal response.
 func withRecovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		recorder := &statusRecorder{ResponseWriter: w}
+		recorder := monitoring.NewStatusRecorder(w)
 		defer func() {
 			recovered := recover()
 			if recovered == nil {
 				return
 			}
-			recoverHTTP(recorder, r, recovered, recorder.committed)
+			recoverHTTP(recorder, r, recovered, recorder.WroteHeader())
 		}()
 		next.ServeHTTP(recorder, r)
 	})
+}
+
+func isNil(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
 }
 
 func recoverHTTP(w http.ResponseWriter, _ *http.Request, recovered any, wroteHeader bool) {

@@ -11,6 +11,8 @@ const (
 	defaultAttempts = 3
 	defaultBackoff  = 200 * time.Millisecond
 	requestTimeout  = 10 * time.Second
+	// RunTimeout bounds one generator run, including retries.
+	RunTimeout = 45 * time.Second
 )
 
 // Config is the process environment the generator needs.

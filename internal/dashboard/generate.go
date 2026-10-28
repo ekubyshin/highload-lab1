@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"net/http"
 )
 
@@ -17,12 +18,7 @@ func Generate(ctx context.Context, httpClient *http.Client, cfg Config) (Result,
 		return Result{}, err
 	}
 	if httpClient == nil {
-		httpClient = &http.Client{
-			Timeout: requestTimeout,
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
+		return Result{}, errors.New("http client is required")
 	}
 	handlers, err := FetchCatalog(ctx, httpClient, cfg)
 	if err != nil {

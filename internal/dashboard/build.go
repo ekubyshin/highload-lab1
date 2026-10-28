@@ -37,7 +37,7 @@ func Build(handlers []Endpoint) (Spec, error) {
 		if err := handler.validate(); err != nil {
 			return Spec{}, err
 		}
-		for _, panel := range panelsFor(handler, i*3+1, i*8) {
+		for _, panel := range panelsFor(handler, i) {
 			builder.WithPanel(panel)
 		}
 	}
@@ -51,17 +51,25 @@ func Build(handlers []Endpoint) (Spec, error) {
 	return spec, nil
 }
 
-func panelsFor(handler Endpoint, id, y int) []*timeseries.PanelBuilder {
+const (
+	panelsPerHandler = 3
+	panelWidth       = 8
+	panelHeight      = 8
+)
+
+func panelsFor(handler Endpoint, index int) []*timeseries.PanelBuilder {
+	id := index*panelsPerHandler + 1
+	y := index * panelHeight
 	base := handler.Method + " " + handler.Path
 	return []*timeseries.PanelBuilder{
 		newPanel(id, base+" latency", "Latency percentiles from histogram buckets summed by le. Empty ranges stay unknown.", "s", y, 0).
-			WithTarget(queryTarget("A", latencyQuery(handler.Method, handler.Path, 0.5), "p50")).
-			WithTarget(queryTarget("B", latencyQuery(handler.Method, handler.Path, 0.95), "p95")).
-			WithTarget(queryTarget("C", latencyQuery(handler.Method, handler.Path, 0.99), "p99")),
-		newPanel(id+1, base+" RPS", "Requests per second for the selected datacenters and pods.", "reqps", y, 8).
-			WithTarget(queryTarget("A", rpsQuery(handler.Method, handler.Path), "rps")),
-		newPanel(id+2, base+" errors", "Error responses per second, one series for each HTTP status code.", "reqps", y, 16).
-			WithTarget(queryTarget("A", errorQuery(handler.Method, handler.Path), "{{status_code}}")),
+			WithTarget(queryTarget("A", latencyQuery(handler.Method, handler.Path, p50).String(), "p50")).
+			WithTarget(queryTarget("B", latencyQuery(handler.Method, handler.Path, p95).String(), "p95")).
+			WithTarget(queryTarget("C", latencyQuery(handler.Method, handler.Path, p99).String(), "p99")),
+		newPanel(id+1, base+" RPS", "Requests per second for the selected datacenters and pods.", "reqps", y, panelWidth).
+			WithTarget(queryTarget("A", rpsQuery(handler.Method, handler.Path).String(), "rps")),
+		newPanel(id+2, base+" errors", "Error responses per second, one series for each HTTP status code.", "reqps", y, panelWidth*2).
+			WithTarget(queryTarget("A", errorQuery(handler.Method, handler.Path).String(), "{{status_code}}")),
 	}
 }
 
@@ -71,7 +79,7 @@ func newPanel(id int, title, description, unit string, y, x int) *timeseries.Pan
 		Title(title).
 		Description(description).
 		Datasource(prometheusRef()).
-		GridPos(gf.GridPos{H: 8, W: 8, X: uint32(x), Y: uint32(y)}).
+		GridPos(gf.GridPos{H: panelHeight, W: panelWidth, X: uint32(x), Y: uint32(y)}).
 		Unit(unit).
 		SpanNulls(common.BoolOrFloat64{Bool: boolPtr(false)}).
 		DrawStyle(common.GraphDrawStyleLine).
@@ -140,12 +148,18 @@ func baseVariable(name, label, query string) *gf.QueryVariableBuilder {
 func expressionsOf(spec Spec) []string {
 	out := make([]string, 0, len(spec.Panels))
 	for _, item := range spec.Panels {
-		if item.Panel == nil {
-			continue
-		}
-		for _, target := range item.Panel.Targets {
-			out = append(out, targetExpr(target))
-		}
+		out = append(out, panelExpressions(item.Panel)...)
+	}
+	return out
+}
+
+func panelExpressions(panel *gf.Panel) []string {
+	if panel == nil {
+		return nil
+	}
+	out := make([]string, len(panel.Targets))
+	for i, target := range panel.Targets {
+		out[i] = targetExpr(target)
 	}
 	return out
 }
