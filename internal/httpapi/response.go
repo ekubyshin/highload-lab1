@@ -12,20 +12,24 @@ type errorBody struct {
 
 type statusRecorder struct {
 	http.ResponseWriter
-	wroteHeader bool
+	committed bool
 }
 
 func (s *statusRecorder) WriteHeader(status int) {
-	if s.wroteHeader {
+	if status >= 100 && status < 200 {
+		s.ResponseWriter.WriteHeader(status)
 		return
 	}
-	s.wroteHeader = true
+	if s.committed {
+		return
+	}
+	s.committed = true
 	s.ResponseWriter.WriteHeader(status)
 }
 
 func (s *statusRecorder) Write(p []byte) (int, error) {
-	if !s.wroteHeader {
-		s.wroteHeader = true
+	if !s.committed {
+		s.committed = true
 	}
 	return s.ResponseWriter.Write(p)
 }

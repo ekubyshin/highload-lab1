@@ -8,6 +8,8 @@ import (
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"gopkg.in/yaml.v3"
+
+	"highload/lab1/pkg/monitoring"
 )
 
 const (
@@ -23,6 +25,8 @@ type Config struct {
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
 	MaxBodyBytes      int64
+	PodID             string
+	Datacenter        string
 }
 
 type fileConfig struct {
@@ -33,6 +37,8 @@ type fileConfig struct {
 	IdleTimeout       duration `yaml:"idle_timeout" env:"HTTP_IDLE_TIMEOUT" env-default:"60s"`
 	ShutdownTimeout   duration `yaml:"shutdown_timeout" env:"HTTP_SHUTDOWN_TIMEOUT" env-default:"15s"`
 	MaxBodyBytes      int64    `yaml:"max_body_bytes" env:"HTTP_MAX_BODY_BYTES" env-default:"65536"`
+	PodID             string   `env:"POD_ID"`
+	Datacenter        string   `env:"DATACENTER"`
 }
 
 type duration time.Duration
@@ -72,6 +78,8 @@ func Load() (Config, error) {
 		IdleTimeout:       time.Duration(raw.IdleTimeout),
 		ShutdownTimeout:   time.Duration(raw.ShutdownTimeout),
 		MaxBodyBytes:      raw.MaxBodyBytes,
+		PodID:             raw.PodID,
+		Datacenter:        raw.Datacenter,
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -103,6 +111,9 @@ func (c Config) validate() error {
 	}
 	if c.MaxBodyBytes > maxAllowedBodyBytes {
 		return fmt.Errorf("max_body_bytes must be at most %d", maxAllowedBodyBytes)
+	}
+	if err := monitoring.ValidateIdentity(c.PodID, c.Datacenter); err != nil {
+		return err
 	}
 	return nil
 }

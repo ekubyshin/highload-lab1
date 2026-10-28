@@ -14,7 +14,7 @@ func TestInternalErrorHidesStorageDetails(t *testing.T) {
 	t.Parallel()
 
 	secret := errors.New("secret-disk-failure")
-	api, err := newAPI(failingStore{err: secret}, NewHealth(), 1024)
+	api, err := newAPI(failingStore{err: secret}, NewHealth(), 1024, testMetrics(t))
 	if err != nil {
 		t.Fatalf("new api: %v", err)
 	}
@@ -80,14 +80,17 @@ func TestPanicAfterHeadersDoesNotReplaceStatus(t *testing.T) {
 func TestNewRejectsIncompleteDependencies(t *testing.T) {
 	t.Parallel()
 
-	if _, err := New(nil, NewHealth(), 1024); err == nil {
+	if _, err := New(nil, NewHealth(), 1024, testMetrics(t)); err == nil {
 		t.Fatal("nil store was accepted")
 	}
-	if _, err := New(item.NewStore(), nil, 1024); err == nil {
+	if _, err := New(item.NewStore(), nil, 1024, testMetrics(t)); err == nil {
 		t.Fatal("nil health was accepted")
 	}
-	if _, err := New(item.NewStore(), NewHealth(), 0); err == nil {
+	if _, err := New(item.NewStore(), NewHealth(), 0, testMetrics(t)); err == nil {
 		t.Fatal("zero body limit was accepted")
+	}
+	if _, err := New(item.NewStore(), NewHealth(), 1024, nil); err == nil {
+		t.Fatal("nil metrics was accepted")
 	}
 }
 

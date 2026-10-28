@@ -11,6 +11,7 @@ import (
 
 	"highload/lab1/internal/httpapi"
 	"highload/lab1/internal/item"
+	"highload/lab1/pkg/monitoring"
 )
 
 func TestItemCRUD(t *testing.T) {
@@ -134,7 +135,7 @@ func TestHealthReadiness(t *testing.T) {
 
 	store := item.NewStore()
 	health := httpapi.NewHealth()
-	api, err := httpapi.New(store, health, 1024)
+	api, err := httpapi.New(store, health, 1024, testMetrics(t))
 	if err != nil {
 		t.Fatalf("new api: %v", err)
 	}
@@ -164,12 +165,21 @@ func TestHealthReadiness(t *testing.T) {
 	assertError(t, rec, http.StatusServiceUnavailable, "not ready")
 }
 
+func testMetrics(t *testing.T) *monitoring.Metrics {
+	t.Helper()
+	metrics, err := monitoring.NewMetrics(monitoring.NewRegistry(), "pod-test", "dc-test")
+	if err != nil {
+		t.Fatalf("metrics: %v", err)
+	}
+	return metrics
+}
+
 func readyAPI(t *testing.T, maxBody int64) (*httpapi.API, *item.Store) {
 	t.Helper()
 	store := item.NewStore()
 	health := httpapi.NewHealth()
 	health.SetReady(true)
-	api, err := httpapi.New(store, health, maxBody)
+	api, err := httpapi.New(store, health, maxBody, testMetrics(t))
 	if err != nil {
 		t.Fatalf("new api: %v", err)
 	}

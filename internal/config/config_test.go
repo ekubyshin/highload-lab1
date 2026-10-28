@@ -3,12 +3,14 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestLoadFileAndDefaults(t *testing.T) {
 	isolateEnv(t)
+	setIdentity(t)
 	path := writeConfig(t, "http_addr: \"127.0.0.1:9090\"\n")
 	t.Setenv("CONFIG_PATH", path)
 
@@ -31,10 +33,14 @@ func TestLoadFileAndDefaults(t *testing.T) {
 	if cfg.MaxBodyBytes != 64*1024 {
 		t.Fatalf("max body = %d", cfg.MaxBodyBytes)
 	}
+	if cfg.PodID != "pod-a" || cfg.Datacenter != "dc-a" {
+		t.Fatalf("identity = %s/%s", cfg.PodID, cfg.Datacenter)
+	}
 }
 
 func TestLoadFileValues(t *testing.T) {
 	isolateEnv(t)
+	setIdentity(t)
 	path := writeConfig(t, `
 http_addr: "127.0.0.1:9090"
 read_timeout: 9s
@@ -63,6 +69,7 @@ max_body_bytes: 128
 
 func TestEnvironmentOverridesFile(t *testing.T) {
 	isolateEnv(t)
+	setIdentity(t)
 	path := writeConfig(t, `
 http_addr: ":8080"
 read_timeout: 9s
@@ -104,10 +111,15 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{name: "body text", file: defaultFile, env: map[string]string{"HTTP_MAX_BODY_BYTES": "nope"}},
 		{name: "zero body", file: defaultFile, env: map[string]string{"HTTP_MAX_BODY_BYTES": "0"}},
 		{name: "huge body", file: defaultFile, env: map[string]string{"HTTP_MAX_BODY_BYTES": "2097152"}},
+		{name: "missing pod", file: defaultFile, env: map[string]string{"POD_ID": ""}},
+		{name: "missing datacenter", file: defaultFile, env: map[string]string{"DATACENTER": ""}},
+		{name: "pod with space", file: defaultFile, env: map[string]string{"POD_ID": "pod 1"}},
+		{name: "datacenter too long", file: defaultFile, env: map[string]string{"DATACENTER": "dc-" + strings.Repeat("a", 63)}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			isolateEnv(t)
+			setIdentity(t)
 			t.Setenv("CONFIG_PATH", writeConfig(t, test.file))
 			for key, value := range test.env {
 				t.Setenv(key, value)
@@ -116,6 +128,36 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 				t.Fatal("invalid configuration was accepted")
 			}
 		})
+	}
+}
+
+func TestIdentityComesFromEnvironmentOnly(t *testing.T) {
+	isolateEnv(t)
+	path := writeConfig(t, `
+http_addr: ":8080"
+pod_id: from-file
+datacenter: from-file
+read_timeout: 5s
+read_header_timeout: 2s
+write_timeout: 10s
+idle_timeout: 60s
+shutdown_timeout: 15s
+max_body_bytes: 65536
+`)
+	t.Setenv("CONFIG_PATH", path)
+	if _, err := Load(); err == nil {
+		t.Fatal("identity from the config file was accepted")
+	}
+
+	setIdentity(t)
+	t.Setenv("POD_ID", "pod-1")
+	t.Setenv("DATACENTER", "dc-1")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.PodID != "pod-1" || cfg.Datacenter != "dc-1" {
+		t.Fatalf("identity = %s/%s", cfg.PodID, cfg.Datacenter)
 	}
 }
 
@@ -148,12 +190,20 @@ func isolateEnv(t *testing.T) {
 		"HTTP_IDLE_TIMEOUT",
 		"HTTP_SHUTDOWN_TIMEOUT",
 		"HTTP_MAX_BODY_BYTES",
+		"POD_ID",
+		"DATACENTER",
 	} {
 		t.Setenv(key, "")
 		if err := os.Unsetenv(key); err != nil {
 			t.Fatalf("unset %s: %v", key, err)
 		}
 	}
+}
+
+func setIdentity(t *testing.T) {
+	t.Helper()
+	t.Setenv("POD_ID", "pod-a")
+	t.Setenv("DATACENTER", "dc-a")
 }
 
 func writeConfig(t *testing.T, body string) string {

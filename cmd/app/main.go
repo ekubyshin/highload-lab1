@@ -12,6 +12,7 @@ import (
 	"highload/lab1/internal/config"
 	"highload/lab1/internal/httpapi"
 	"highload/lab1/internal/item"
+	"highload/lab1/pkg/monitoring"
 )
 
 func main() {
@@ -30,7 +31,11 @@ func run() error {
 		return err
 	}
 	health := httpapi.NewHealth()
-	api, err := httpapi.New(item.NewStore(), health, cfg.MaxBodyBytes)
+	metrics, err := monitoring.NewMetrics(monitoring.NewRegistry(), cfg.PodID, cfg.Datacenter)
+	if err != nil {
+		return err
+	}
+	api, err := httpapi.New(item.NewStore(), health, cfg.MaxBodyBytes, metrics)
 	if err != nil {
 		return err
 	}
@@ -43,6 +48,6 @@ func run() error {
 		WriteTimeout:      cfg.WriteTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
 	}
-	log.Printf("http server starting on %s", cfg.HTTPAddr)
+	log.Printf("http server starting on %s pod %s datacenter %s", cfg.HTTPAddr, cfg.PodID, cfg.Datacenter)
 	return httpapi.ListenAndServe(ctx, server, health, cfg.ShutdownTimeout)
 }

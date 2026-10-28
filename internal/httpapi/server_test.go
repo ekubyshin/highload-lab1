@@ -16,7 +16,7 @@ func TestServeClearsReadinessOnShutdown(t *testing.T) {
 
 	store := item.NewStore()
 	health := NewHealth()
-	api, err := New(store, health, 1024)
+	api, err := New(store, health, 1024, testMetrics(t))
 	if err != nil {
 		t.Fatalf("new api: %v", err)
 	}
