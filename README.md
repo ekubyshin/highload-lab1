@@ -4,7 +4,7 @@
 
 ## Текущее состояние
 
-Базовый HTTP-сервис принимает `POST /items`, `GET /items/{id}`, `PUT /items/{id}` и служебные `GET /health`, `GET /metrics`, `GET /handlers`. Записи хранятся в памяти процесса и не удаляются. `docker compose up` собирает локальные образы, генерирует пароль Grafana и запускает два экземпляра, Prometheus и Grafana. Генератор дашборда и сценарий k6 еще не реализованы: `dashboard-generator` завершается с кодом `1`, поэтому k6 не стартует.
+Базовый HTTP-сервис принимает `POST /items`, `GET /items/{id}`, `PUT /items/{id}` и служебные `GET /health`, `GET /metrics`, `GET /handlers`. Записи хранятся в памяти процесса и не удаляются. `docker compose up` собирает локальные образы, генерирует пароль Grafana и запускает два экземпляра, Prometheus и Grafana. Генератор читает каталог `GET /handlers` и создает или обновляет дашборд `items-service`: для каждой бизнес-ручки есть latency, RPS и ошибки, дашборд сохранен с `editable: false`. Сценарий k6 еще не написан. После успешного генератора Compose запускает k6, и контейнер завершается, пока в `load/` нет `scenario.js`.
 
 ## Запуск стенда
 
@@ -80,7 +80,7 @@ histogram_quantile(q, sum by (le) (rate(http_request_duration_seconds_bucket[win
 
 - `GET /metrics` отдает registry в текстовом формате Prometheus и не входит в HTTP-метрики.
 - `GET /health` тоже не входит в HTTP-метрики.
-- `GET /handlers` инструментируется тем же middleware, но не входит в бизнес-каталог. Будущий дашборд строится по каталогу, поэтому собственный RPS `/handlers` не смешивается с RPS бизнес-ручек.
+- `GET /handlers` инструментируется тем же middleware, но не входит в бизнес-каталог. Дашборд строится по этому каталогу, поэтому собственный RPS `/handlers` не смешивается с RPS бизнес-ручек.
 
 Пример каталога:
 
@@ -140,10 +140,10 @@ histogram_quantile(q, sum by (le) (rate(http_request_duration_seconds_bucket[win
 ### Контракты совместимости
 
 - Go client экспортирует классический Prometheus Histogram и Counter в текстовом формате Prometheus. Выбранный Prometheus поддерживает `rate`, `sum`, `histogram_quantile` и HTTP API `/api/v1/query` для этих рядов.
-- Для Grafana выбран документированный Dashboard API `dashboard.grafana.app/v1`: `POST /apis/dashboard.grafana.app/v1/namespaces/default/dashboards` для создания и `GET`/`PUT` по тому же пути с UID для чтения/обновления. JSON модели дашборда помещается в `spec`; фиксированный UID задается через `metadata.name`. SDK не используется. Сохраняются admin HTTP Basic-аутентификация, фиксированный datasource UID и `editable: false`. Детали версии/конфликтов проверяются при реализации клиента.
+- Для Grafana выбран документированный Dashboard API `dashboard.grafana.app/v1`: `POST /apis/dashboard.grafana.app/v1/namespaces/default/dashboards` для создания и `GET`/`PUT` по тому же пути с UID для чтения/обновления. JSON модели дашборда помещается в `spec`; фиксированный UID задается через `metadata.name`. Панели и переменные собирает Grafana Foundation SDK `github.com/grafana/grafana-foundation-sdk/go v0.0.22-0.20261027120448-78572dabdce6` (коммит `78572dabdce6`, `schemaVersion` 42 для Grafana `13.3.0`). PromQL остается строками: в нем есть макросы Grafana. Запись в Dashboard API делает свой HTTP-клиент с admin Basic-аутентификацией, datasource UID `prometheus` и `editable: false`. На Grafana `13.3.0` модель со `schemaVersion` `42` создается и повторно обновляется; обычная кнопка редактирования скрыта, у администратора остается явное «Make editable».
 - k6 намеренно не обновлен до текущей ветки 2.x: план опирается на `externally-controlled` с `duration: "0s"` в версии 1.6.0. Один процесс с JS pacing должен разгоняться до суммарных 30 RPS за две минуты и работать до остановки, без повторного ramp-up. VU не равны RPS; фактическая скорость проверяется мониторингом.
 
-Это выбор совместимых документированных контрактов. Scrape двух экземпляров и provisioning datasource проверены. Импорт JSON дашборда, admin-клиент генератора и непрерывность k6 остаются этапам 5–7.
+Это выбор совместимых документированных контрактов. Scrape двух экземпляров, provisioning datasource и запись дашборда проверены. Непрерывность k6 остается этапам 6–7.
 
 Справочные источники:
 
@@ -163,7 +163,7 @@ go build -mod=readonly -o bin/ ./cmd/...
 go mod verify
 ```
 
-Эти команды проверяют хранилище, контракт трех бизнес-ручек, готовность, остановку сервера, изоляцию registry, лейблы, histogram, каталог `/handlers` и bootstrap credentials. Генератор дашборда и сценарий k6 из шагов 5–6 пока не реализованы.
+Эти команды проверяют хранилище, контракт трех бизнес-ручек, готовность, остановку сервера, изоляцию registry, лейблы, histogram, каталог `/handlers`, bootstrap credentials и генератор дашборда. Сценарий k6 из шага 6 пока не реализован.
 
 Go может автоматически загрузить рекомендованный toolchain. Для проверки установленным Go ветки 1.26 допустимо явно задать `GOTOOLCHAIN=local`, но такой прогон нужно отличать от проверки именно на 1.26.8.
 
