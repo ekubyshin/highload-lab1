@@ -27,4 +27,5 @@ ENTRYPOINT ["/app/stack-init"]
 
 FROM runtime AS app
 COPY --from=build /out/app /app/app
+COPY config.yaml /app/config.yaml
 ENTRYPOINT ["/app/app"]
