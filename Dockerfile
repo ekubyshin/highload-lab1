@@ -22,7 +22,12 @@ COPY --from=build /out/dashboard-generator /app/dashboard-generator
 ENTRYPOINT ["/app/dashboard-generator"]
 
 FROM runtime AS stack-init
+# This container creates the private credentials volume. It also seeds Grafana's
+# data directory, because it mounts that volume first and the server must be
+# able to create its database afterwards.
+USER 0:0
 COPY --from=build /out/stack-init /app/stack-init
+RUN mkdir -p /var/lib/grafana && chown 472:0 /var/lib/grafana && chmod 777 /var/lib/grafana
 ENTRYPOINT ["/app/stack-init"]
 
 FROM runtime AS app
